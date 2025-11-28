@@ -1,0 +1,21 @@
+# Core Web Framework
+fastapi
+uvicorn[standard]
+
+# Algorithmic & Scientific Computing
+pyorbital
+numpy
+scipy
+
+# Database & ORM
+sqlalchemy
+psycopg2-binary
+
+# Configuration
+python-dotenv
+
+# Development & Quality
+black
+flake8
+mypy
+pytest
