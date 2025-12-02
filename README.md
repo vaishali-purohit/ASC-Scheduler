@@ -26,3 +26,45 @@ This project aims to automate and visualize the critical process of scheduling c
 
 - **Pass Schedule Dashboard:** A responsive **React/TypeScript** interface that clearly displays the upcoming satellite pass times and system status.
 - **Professional Feedback:** Provides non-intrusive **modal notifications** for scheduling errors, giving the operator clear and actionable feedback.
+
+## Project Structure
+
+Asc-scheduler/
+├── backend/                  # Python/FastAPI/PostgreSQL logic
+│   ├── app/                  # Main Python source directory
+│   │   ├── api/              # API endpoints (e.g., passes, schedule, status)
+│   │   │   ├── __init__.py
+│   │   │   └── endpoints.py  # Defines all FastAPI endpoints
+│   │   ├── core/             # Core business logic and TLE calculations
+│   │   │   ├── __init__.py
+│   │   │   └── config.py     # settings (DB URL, etc.)
+│   │   ├── db/               # Database connection and model management
+│   │   │   ├── __init__.py
+│   │   │   ├── sessions.py   # DB engine / session handling
+│   │   │   └── models.py     # SQLAlchemy/ORM models and schema definition
+│   │   └── main.py           # FastAPI application entry point
+│   ├── tests/                # Pytest unit tests
+│   │   └── unit/
+│   ├── requirements.txt      # Python dependencies (FastAPI, pyorbital, psycopg2, etc.)
+│   ├── README.md             # Project Setup Guide
+│   └── start_backend.sh      # Simple script to run the Python server (no Docker/CI/CD mention)
+|
+├── frontend/                 # React/TypeScript application
+│   ├── public/               # HTML, assets
+│   ├── src/                  # Main React source directory
+│   │   ├── api/              # Services for fetching data from Python backend
+│   │   │   └── schedulerApi.ts
+│   │   ├── components/       # Reusable UI components (e.g., Table, NotificationModal)
+│   │   │   └── PassScheduleTable.tsx
+│   │   ├── pages/            # Main view components
+│   │   │   └── Dashboard.tsx
+│   │   ├── App.tsx
+│   │   └── main.tsx          # Application entry point
+│   ├── tests/                # Jest unit tests
+│   │   └── unit/
+│   ├── package.json          # Node dependencies (React, TypeScript, Material UI/Tailwind)
+│   ├── README.md             # Project Setup Guide
+│   └── start_frontend.sh     # Simple script to run the React development server
+|
+├── .env.example              # Template for environment variables (DB credentials, etc.)
+└── README.md                 # Project description and features
