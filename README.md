@@ -29,42 +29,85 @@ This project aims to automate and visualize the critical process of scheduling c
 
 ## Project Structure
 
-Asc-scheduler/
-├── backend/                  # Python/FastAPI/PostgreSQL logic
-│   ├── app/                  # Main Python source directory
-│   │   ├── api/              # API endpoints (e.g., passes, schedule, status)
+```
+ASC-Scheduler/
+├── backend/                    # Python/FastAPI/PostgreSQL logic
+│   ├── app/                    # Main Python source directory
+│   │   ├── api/                # API endpoints
 │   │   │   ├── __init__.py
-│   │   │   └── endpoints.py  # Defines all FastAPI endpoints
-│   │   ├── core/             # Core business logic and TLE calculations
+│   │   │   └── endpoints.py   # Defines all FastAPI endpoints
+│   │   ├── core/               # Core configuration
 │   │   │   ├── __init__.py
-│   │   │   └── config.py     # settings (DB URL, etc.)
-│   │   ├── db/               # Database connection and model management
+│   │   │   └── config.py      # Settings (DB URL, etc.)
+│   │   ├── db/                 # Database connection and model management
 │   │   │   ├── __init__.py
-│   │   │   ├── sessions.py   # DB engine / session handling
-│   │   │   └── models.py     # SQLAlchemy/ORM models and schema definition
-│   │   └── main.py           # FastAPI application entry point
-│   ├── tests/                # Pytest unit tests
+│   │   │   ├── session.py     # DB engine / session handling
+│   │   │   └── models.py      # SQLAlchemy/ORM models and schema definition
+│   │   └── main.py             # FastAPI application entry point
+│   ├── tests/                  # Pytest unit tests
 │   │   └── unit/
-│   ├── requirements.txt      # Python dependencies (FastAPI, pyorbital, psycopg2, etc.)
-│   ├── README.md             # Project Setup Guide
-│   └── start_backend.sh      # Simple script to run the Python server (no Docker/CI/CD mention)
-|
-├── frontend/                 # React/TypeScript application
-│   ├── public/               # HTML, assets
-│   ├── src/                  # Main React source directory
-│   │   ├── api/              # Services for fetching data from Python backend
-│   │   │   └── schedulerApi.ts
-│   │   ├── components/       # Reusable UI components (e.g., Table, NotificationModal)
+│   ├── requirements.txt        # Python dependencies
+│   ├── README.md               # Backend Setup Guide
+│   └── start_backend.sh        # Script to run the Python server
+│
+├── frontend/                   # React/TypeScript application
+│   ├── public/                 # HTML, assets
+│   ├── src/                    # Main React source directory
+│   │   ├── components/        # Reusable UI components
 │   │   │   └── PassScheduleTable.tsx
-│   │   ├── pages/            # Main view components
+│   │   ├── pages/             # Main view components
 │   │   │   └── Dashboard.tsx
 │   │   ├── App.tsx
-│   │   └── main.tsx          # Application entry point
-│   ├── tests/                # Jest unit tests
-│   │   └── unit/
-│   ├── package.json          # Node dependencies (React, TypeScript, Material UI/Tailwind)
-│   ├── README.md             # Project Setup Guide
-│   └── start_frontend.sh     # Simple script to run the React development server
-|
-├── .env.example              # Template for environment variables (DB credentials, etc.)
-└── README.md                 # Project description and features
+│   │   └── main.tsx           # Application entry point
+│   ├── package.json           # Node dependencies
+│   ├── README.md              # Frontend Setup Guide
+│   └── start_frontend.sh      # Script to run the React development server
+│
+└── README.md                   # Main project documentation
+```
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.8+
+- Node.js 16+
+- PostgreSQL 12+
+- pip and npm
+
+### Backend Setup
+
+See [backend/README.md](backend/README.md) for detailed instructions.
+
+1. Navigate to backend directory
+2. Create virtual environment
+3. Install dependencies
+4. Set up `.env` file with database credentials
+5. Run the server
+
+### Frontend Setup
+
+See [frontend/README.md](frontend/README.md) for detailed instructions.
+
+1. Navigate to frontend directory
+2. Install dependencies
+3. Run the development server
+
+## API Endpoints
+
+### Health Check
+- `GET /` - Root endpoint
+- `GET /health/db` - Database connection health check
+
+### Satellites
+- `GET /satellites` - Get all satellites with related TLE and PassSchedule data
+
+## Development Status
+
+✅ Backend API structure  
+✅ Database models and relationships  
+✅ Database connection  
+✅ Basic CRUD endpoints (in progress)  
+🚧 Frontend integration (in progress)  
+🚧 Orbital prediction (planned)  
+🚧 Pass scheduling (planned)
