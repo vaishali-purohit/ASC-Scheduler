@@ -61,6 +61,7 @@ DB_PASSWORD=your_postgres_password
 DB_HOSTNAME=localhost
 DB_PORT=5432
 DB_NAME=asc_scheduler
+CELESTRAK_API_URL=your_data_link_url
 ```
 
 Replace the values with your actual PostgreSQL credentials.
@@ -97,36 +98,40 @@ Once the server is running:
 
 Stores satellite information.
 
-| Column      | Type    | Constraints           |
-| ----------- | ------- | --------------------- |
-| id          | integer | PRIMARY KEY, NOT NULL |
-| name        | text    | NOT NULL              |
-| description | text    | NOT NULL              |
+| Column      | Type                   | Constraints           |
+| ----------- | ---------------------- | --------------------- |
+| norad_id    | integer                | PRIMARY KEY, NOT NULL |
+| name        | character varying(100) | NOT NULL              |
+| description | text                   | NULLABLE              |
 
 #### 2. `tle`
 
 Stores Two-Line Element (TLE) data for satellites.
 
-| Column       | Type                     | Constraints           |
-| ------------ | ------------------------ | --------------------- |
-| tle_id       | integer                  | PRIMARY KEY, NOT NULL |
-| satellite_id | integer                  | FOREIGN KEY, NOT NULL |
-| line1        | character varying(80)    | NOT NULL              |
-| line2        | character varying(80)    | NOT NULL              |
-| timestamp    | timestamp with time zone | NOT NULL              |
+| Column             | Type                     | Constraints           |
+| ------------------ | ------------------------ | --------------------- |
+| tle_id             | integer                  | PRIMARY KEY, NOT NULL |
+| satellite_norad_id | integer                  | FOREIGN KEY, NOT NULL |
+| line1              | character varying(80)    | NOT NULL              |
+| line2              | character varying(80)    | NOT NULL              |
+| timestamp          | timestamp with time zone | NOT NULL              |
 
 #### 3. `passschedule`
 
 Stores scheduled satellite passes.
 
-| Column         | Type                     | Constraints           |
-| -------------- | ------------------------ | --------------------- |
-| pass_id        | integer                  | PRIMARY KEY, NOT NULL |
-| satellite_id   | integer                  | FOREIGN KEY, NOT NULL |
-| ground_station | character varying(100)   | NOT NULL              |
-| start_time     | timestamp with time zone | NOT NULL              |
-| end_time       | timestamp with time zone | NOT NULL              |
-| status         | character varying(50)    | NOT NULL              |
+| Column             | Type                     | Constraints           |
+| ------------------ | ------------------------ | --------------------- |
+| pass_id            | integer                  | PRIMARY KEY, NOT NULL |
+| satellite_norad_id | integer                  | FOREIGN KEY, NOT NULL |
+| ground_station     | character varying(100)   | NOT NULL              |
+| start_time         | timestamp with time zone | NOT NULL              |
+| end_time           | timestamp with time zone | NOT NULL              |
+| status             | character varying(50)    | NOT NULL              |
+
+## Data Link
+
+- [Celestrak TLE Data](https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle)
 
 ## API Endpoints
 

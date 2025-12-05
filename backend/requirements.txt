@@ -13,6 +13,7 @@ psycopg2-binary
 
 # Configuration
 python-dotenv
+requests
 
 # Development & Quality
 black
