@@ -1,9 +1,5 @@
-function App() {
-  return (
-    <div>
-      <h1>ASC Scheduler</h1>
-    </div>
-  );
-}
+import Dashboard from "./pages/Dashboard";
+
+const App = () => <Dashboard />;
 
 export default App;

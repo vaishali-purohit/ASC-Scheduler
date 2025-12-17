@@ -1,0 +1,73 @@
+const API_BASE =
+  import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:8000";
+
+export type Tle = {
+  tle_id: number;
+  line1: string;
+  line2: string;
+  timestamp: string | null;
+};
+
+export type PassSchedule = {
+  pass_id: number;
+  satellite_norad_id: number;
+  satellite_name?: string | null;
+  ground_station: string;
+  start_time: string | null;
+  end_time: string | null;
+  status: string;
+};
+
+export type Satellite = {
+  norad_id: number;
+  name: string;
+  description?: string | null;
+  tles: Tle[];
+  pass_schedules: PassSchedule[];
+};
+
+const request = async <T>(path: string, options?: RequestInit): Promise<T> => {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { "Content-Type": "application/json" },
+    ...options,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || res.statusText);
+  }
+  return res.json();
+};
+
+export const fetchSatellites = async (): Promise<Satellite[]> =>
+  request("/satellites");
+
+export const fetchPassSchedules = async (): Promise<PassSchedule[]> =>
+  request("/pass-schedules");
+
+export const refreshTle = async (
+  group = "active"
+): Promise<{
+  status: string;
+  message: string;
+  summary: unknown;
+}> =>
+  request(`/tle/refresh?group=${encodeURIComponent(group)}`, {
+    method: "POST",
+  });
+
+export const generatePassSchedules = async (
+  method = "sample",
+  days_ahead = 7
+): Promise<{
+  status: string;
+  message: string;
+  summary: unknown;
+}> =>
+  request(
+    `/pass-schedules/generate?method=${encodeURIComponent(
+      method
+    )}&days_ahead=${days_ahead}`,
+    {
+      method: "POST",
+    }
+  );
