@@ -2,10 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import text
 from typing import List
+from datetime import datetime
 
 from app.db.session import get_db
 from app.db.models import Satellite, TLE, PassSchedule
+
 from app.services.tle_ingest import import_gp_group
+from app.services.pass_generator import generate_sample_pass_schedules, generate_realistic_pass_data
+from app.services.schedule_validator import validate_schedule_creation, get_schedule_statistics, optimize_schedule
+from app.api.schemas import SatelliteOut, TLEOut, PassScheduleOut
 
 router = APIRouter()
 
@@ -58,7 +63,7 @@ def refresh_tle_data(group: str = "active", db: Session = Depends(get_db)):
         ) from e
 
 
-@router.get("/satellites", response_model=List[dict])
+@router.get("/satellites", response_model=List[SatelliteOut])
 def get_all_satellites_with_related_data(db: Session = Depends(get_db)):
     """Get all satellites with their related TLE and PassSchedule data."""
     try:
@@ -67,39 +72,7 @@ def get_all_satellites_with_related_data(db: Session = Depends(get_db)):
             joinedload(Satellite.pass_schedules),
         ).all()
 
-        result = []
-        for satellite in satellites:
-            satellite_data = {
-                "norad_id": satellite.norad_id,
-                "name": satellite.name,
-                "description": satellite.description,
-                "tles": [
-                    {
-                        "tle_id": tle.tle_id,
-                        "line1": tle.line1,
-                        "line2": tle.line2,
-                        "timestamp": tle.timestamp.isoformat() if tle.timestamp else None,
-                    }
-                    for tle in satellite.tles
-                ],
-                "pass_schedules": [
-                    {
-                        "pass_id": schedule.pass_id,
-                        "ground_station": schedule.ground_station,
-                        "start_time": schedule.start_time.isoformat()
-                        if schedule.start_time
-                        else None,
-                        "end_time": schedule.end_time.isoformat()
-                        if schedule.end_time
-                        else None,
-                        "status": schedule.status,
-                    }
-                    for schedule in satellite.pass_schedules
-                ],
-            }
-            result.append(satellite_data)
-
-        return result
+        return satellites
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -107,7 +80,7 @@ def get_all_satellites_with_related_data(db: Session = Depends(get_db)):
         )
 
 
-@router.get("/satellites/{norad_id}", response_model=dict)
+@router.get("/satellites/{norad_id}", response_model=SatelliteOut)
 def get_satellite_by_id(norad_id: int, db: Session = Depends(get_db)):
     """Get a single satellite by NORAD ID, including its TLEs and pass schedules."""
     satellite = (
@@ -123,37 +96,10 @@ def get_satellite_by_id(norad_id: int, db: Session = Depends(get_db)):
     if satellite is None:
         raise HTTPException(status_code=404, detail="Satellite not found")
 
-    return {
-        "norad_id": satellite.norad_id,
-        "name": satellite.name,
-        "description": satellite.description,
-        "tles": [
-            {
-                "tle_id": tle.tle_id,
-                "line1": tle.line1,
-                "line2": tle.line2,
-                "timestamp": tle.timestamp.isoformat() if tle.timestamp else None,
-            }
-            for tle in satellite.tles
-        ],
-        "pass_schedules": [
-            {
-                "pass_id": schedule.pass_id,
-                "ground_station": schedule.ground_station,
-                "start_time": schedule.start_time.isoformat()
-                if schedule.start_time
-                else None,
-                "end_time": schedule.end_time.isoformat()
-                if schedule.end_time
-                else None,
-                "status": schedule.status,
-            }
-            for schedule in satellite.pass_schedules
-        ],
-    }
+    return satellite
 
 
-@router.get("/satellites/{norad_id}/tles", response_model=List[dict])
+@router.get("/satellites/{norad_id}/tles", response_model=List[TLEOut])
 def list_tles_for_satellite(norad_id: int, db: Session = Depends(get_db)):
     """List all TLEs for a given satellite (by NORAD ID), newest first."""
     exists = (
@@ -171,18 +117,10 @@ def list_tles_for_satellite(norad_id: int, db: Session = Depends(get_db)):
         .all()
     )
 
-    return [
-        {
-            "tle_id": tle.tle_id,
-            "line1": tle.line1,
-            "line2": tle.line2,
-            "timestamp": tle.timestamp.isoformat() if tle.timestamp else None,
-        }
-        for tle in tles
-    ]
+    return tles
 
 
-@router.get("/satellites/{norad_id}/tles/latest", response_model=dict)
+@router.get("/satellites/{norad_id}/tles/latest", response_model=TLEOut)
 def get_latest_tle_for_satellite(norad_id: int, db: Session = Depends(get_db)):
     """Get the most recent TLE for a given satellite (by NORAD ID)."""
     exists = (
@@ -203,28 +141,127 @@ def get_latest_tle_for_satellite(norad_id: int, db: Session = Depends(get_db)):
     if tle is None:
         raise HTTPException(status_code=404, detail="No TLEs found for this satellite")
 
-    return {
-        "tle_id": tle.tle_id,
-        "line1": tle.line1,
-        "line2": tle.line2,
-        "timestamp": tle.timestamp.isoformat() if tle.timestamp else None,
-    }
+    return tle
 
 
-@router.get("/pass-schedules", response_model=List[dict])
+
+@router.get("/pass-schedules", response_model=List[PassScheduleOut])
 def list_pass_schedules(db: Session = Depends(get_db)):
     """List all scheduled passes with their associated satellite (by NORAD ID)."""
     schedules = db.query(PassSchedule).options(joinedload(PassSchedule.satellite)).all()
 
-    return [
-        {
-            "pass_id": s.pass_id,
-            "satellite_norad_id": s.satellite_norad_id,
-            "satellite_name": s.satellite.name if s.satellite else None,
-            "ground_station": s.ground_station,
-            "start_time": s.start_time.isoformat() if s.start_time else None,
-            "end_time": s.end_time.isoformat() if s.end_time else None,
-            "status": s.status,
+    # inject satellite_name for response schema
+    for s in schedules:
+        s.satellite_name = s.satellite.name if s.satellite else None
+
+    return schedules
+
+
+
+@router.post("/pass-schedules/generate")
+def generate_pass_schedules(
+    method: str = "sample",
+    days_ahead: int = 7,
+    db: Session = Depends(get_db)
+):
+    """
+    Generate pass schedules for all satellites in the database.
+    
+    - method: "sample" for test data, "realistic" for orbital calculations
+    - days_ahead: number of days to generate passes for
+    """
+    try:
+        if method == "realistic":
+            summary = generate_realistic_pass_data(db)
+        else:
+            summary = generate_sample_pass_schedules(db, days_ahead=days_ahead)
+        
+        return {
+            "status": "success",
+            "message": f"Generated pass schedules using {method} method",
+            "summary": summary,
         }
-        for s in schedules
-    ]
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating pass schedules: {str(e)}"
+        ) from e
+
+
+@router.post("/pass-schedules/validate")
+def validate_pass_schedule(
+    satellite_norad_id: int,
+    ground_station: str,
+    start_time: datetime,
+    end_time: datetime,
+    db: Session = Depends(get_db)
+):
+    """
+    Validate a proposed pass schedule for temporal conflicts.
+    
+    - satellite_norad_id: NORAD catalog ID of the satellite
+    - ground_station: Ground station name
+    - start_time: Proposed start time (ISO format)
+    - end_time: Proposed end time (ISO format)
+    
+    Returns validation results with any detected conflicts.
+    """
+    try:
+        is_valid, conflicts = validate_schedule_creation(
+            satellite_norad_id=satellite_norad_id,
+            ground_station=ground_station,
+            start_time=start_time,
+            end_time=end_time,
+            db=db
+        )
+        
+        return {
+            "is_valid": is_valid,
+            "conflicts": [conflict.to_dict() for conflict in conflicts],
+            "total_conflicts": len(conflicts),
+            "high_severity_conflicts": len([c for c in conflicts if c.severity == "high"]),
+            "validation_timestamp": datetime.utcnow().isoformat() + "Z"
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error validating pass schedule: {str(e)}"
+        ) from e
+
+
+@router.get("/schedule/statistics")
+def get_schedule_stats(db: Session = Depends(get_db)):
+    """
+    Get statistics about the current schedule state.
+    
+    Returns summary information about scheduled passes, conflicts, and system health.
+    """
+    try:
+        stats = get_schedule_statistics(db)
+        return stats
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error getting schedule statistics: {str(e)}"
+        ) from e
+
+
+@router.post("/schedule/optimize")
+def optimize_current_schedule(db: Session = Depends(get_db)):
+    """
+    Optimize the current schedule by resolving conflicts and finding better time slots.
+    
+    Returns summary of optimization results.
+    """
+    try:
+        result = optimize_schedule(db)
+        return {
+            "status": "success",
+            "optimization_result": result
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error optimizing schedule: {str(e)}"
+        ) from e
