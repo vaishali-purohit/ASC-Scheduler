@@ -15,6 +15,9 @@ psycopg2-binary
 python-dotenv
 requests
 
+# Background Tasks & Scheduling
+apscheduler
+
 # Development & Quality
 black
 flake8

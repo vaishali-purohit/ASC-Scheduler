@@ -12,6 +12,7 @@ source .venv/bin/activate
 # Install dependencies (only installs new ones if already run)
 pip install -r requirements.txt
 
+
 # Run the FastAPI application
 # The --host 0.0.0.0 ensures it's accessible from the frontend
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
