@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index
 from sqlalchemy.orm import relationship
 from .session import Base
 
@@ -30,6 +30,11 @@ class TLE(Base):
     # Relationships
     satellite = relationship("Satellite", back_populates="tles")
 
+    # Index for fast TLE lookups by satellite and recency
+    __table_args__ = (
+        Index('idx_tle_satellite_timestamp', 'satellite_norad_id', 'timestamp'),
+    )
+
     def __repr__(self) -> str:
         return f"<TLE(tle_id={self.tle_id}, satellite_norad_id={self.satellite_norad_id})>"
 
@@ -54,6 +59,18 @@ class PassSchedule(Base):
 
     # Relationships
     satellite = relationship("Satellite", back_populates="pass_schedules")
+
+    # Compound indexes for optimal query performance (as mentioned in README)
+    __table_args__ = (
+        # Primary schedule lookup index - for finding next available contact time
+        Index('idx_pass_schedule_optimized', 'start_time', 'end_time', 'satellite_norad_id'),
+        # Ground station scheduling index
+        Index('idx_pass_schedule_station_time', 'ground_station', 'start_time'),
+        # Status-based filtering index
+        Index('idx_pass_schedule_status', 'status', 'start_time'),
+        # Overlap detection index for conflict checking
+        Index('idx_pass_schedule_overlap', 'start_time', 'end_time'),
+    )
 
     def __repr__(self) -> str:
         return (
