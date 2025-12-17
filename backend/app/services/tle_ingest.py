@@ -16,8 +16,10 @@ load_dotenv(dotenv_path=env_path)
 
 logger = logging.getLogger(__name__)
 
+
 # Database configuration from .env
-CELESTRAK_GP_URL: str = os.getenv("CELESTRAK_API_URL", "link")
+CELESTRAK_GP_URL: str = os.getenv("CELESTRAK_API_URL", "https://celestrak.org/NORAD/elements/gp.php")
+
 
 def _parse_tle_epoch(line1: str) -> datetime:
     """
@@ -43,6 +45,64 @@ def _parse_tle_epoch(line1: str) -> datetime:
     except Exception:  # noqa: BLE001
         logger.warning("Failed to parse TLE epoch from line1 '%s', using current UTC time", line1)
         return datetime.now(timezone.utc)
+
+
+def _validate_tle_data(line1: str, line2: str, norad_id: int) -> bool:
+    """
+    Validate TLE data before storing in database.
+    Returns True if TLE is valid, False otherwise.
+    """
+    try:
+        # Check TLE format
+        if not (line1.startswith("1 ") and line2.startswith("2 ")):
+            logger.warning(f"TLE for NORAD ID {norad_id} has invalid format")
+            return False
+        
+        # Check line lengths
+        if len(line1) < 69 or len(line2) < 69:
+            logger.warning(f"TLE for NORAD ID {norad_id} has invalid line length")
+            return False
+        
+        # Validate epoch date
+        epoch = _parse_tle_epoch(line1)
+        now_utc = datetime.now(timezone.utc)
+        
+        # Reject future-dated TLEs
+        if epoch > now_utc:
+            logger.warning(f"TLE for NORAD ID {norad_id} has future epoch date: {epoch}")
+            return False
+        
+        # Reject very old TLEs (older than 6 months)
+        cutoff_date = now_utc - timedelta(days=180)
+        if epoch < cutoff_date:
+            logger.warning(f"TLE for NORAD ID {norad_id} has too old epoch date: {epoch}")
+            return False
+        
+        # Validate orbital period for LEO satellites
+        try:
+            # Extract mean motion from line 2 (revolutions per day)
+            mean_motion_str = line2[52:63].strip()
+            mean_motion = float(mean_motion_str)
+            
+            # Calculate orbital period in minutes
+            period_minutes = 1440.0 / mean_motion
+            
+            # LEO satellites typically have periods between 84-127 minutes
+            # Reject unrealistic periods
+            if period_minutes < 84 or period_minutes > 127:
+                logger.info(f"TLE for NORAD ID {norad_id} has non-LEO period: {period_minutes:.1f} minutes")
+                # Allow non-LEO satellites but log them
+                
+        except Exception as period_error:
+            logger.warning(f"Failed to validate orbital period for NORAD ID {norad_id}: {period_error}")
+            # Don't reject TLEs if period validation fails
+        
+        logger.debug(f"TLE validation passed for NORAD ID {norad_id}")
+        return True
+        
+    except Exception as e:
+        logger.warning(f"Failed to validate TLE for NORAD ID {norad_id}: {e}")
+        return False
 
 
 def _parse_tle_text(tle_text: str) -> List[Dict[str, Any]]:
@@ -75,15 +135,20 @@ def _parse_tle_text(tle_text: str) -> List[Dict[str, Any]]:
 
         epoch = _parse_tle_epoch(line1)
 
-        records.append(
-            {
-                "OBJECT_NAME": name,
-                "NORAD_CAT_ID": norad_id,
-                "TLE_LINE1": line1,
-                "TLE_LINE2": line2,
-                "EPOCH": epoch,
-            }
-        )
+
+        # Validate TLE data before adding to records
+        if _validate_tle_data(line1, line2, norad_id):
+            records.append(
+                {
+                    "OBJECT_NAME": name,
+                    "NORAD_CAT_ID": norad_id,
+                    "TLE_LINE1": line1,
+                    "TLE_LINE2": line2,
+                    "EPOCH": epoch,
+                }
+            )
+        else:
+            logger.debug(f"Skipping invalid TLE for satellite {name} (NORAD ID: {norad_id})")
 
     return records
 
@@ -196,9 +261,13 @@ def import_gp_group(db: Session, group: str = "active") -> Dict[str, Any]:
 
             store_tle_for_satellite(db, sat, line1=line1, line2=line2, epoch=epoch)
             tles_inserted += 1
+
         except Exception as exc:  # noqa: BLE001
             logger.warning("Skipping GP record due to error: %s", exc)
-            db.rollback()
+            try:
+                db.rollback()
+            except Exception as rollback_error:
+                logger.error("Database rollback failed: %s", rollback_error)
             continue
 
     summary = {
