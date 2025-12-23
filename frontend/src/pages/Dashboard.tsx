@@ -1,110 +1,232 @@
-import { useEffect, useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 
-import {
-  fetchPassSchedules,
-  fetchSatellites,
-  refreshTle,
-  generatePassSchedules,
-  type Satellite,
-  type PassSchedule,
-} from "../api/schedulerApi";
-import PassScheduleTable from "../components/PassScheduleTable";
-import Card from "../components/Card";
-import Layout from "../components/Layout";
-import SatelliteList from "../components/SatelliteList";
+import { refreshTle, generatePassSchedules } from "../api/schedulerApi";
+import { useDataContext } from "../hooks/useDataContext";
+import TabNavigation from "../components/layout/TabNavigation";
+import Header from "../components/layout/Header";
+import TwoColumnGrid from "../components/ui/TwoColumnGrid";
+import SatelliteCard from "../components/cards/SatelliteCard";
+import PassScheduleCard from "../components/cards/PassScheduleCard";
+import Card from "../components/ui/Card";
 
 const Dashboard = () => {
-  const [satellites, setSatellites] = useState<Satellite[]>([]);
-  const [passes, setPasses] = useState<PassSchedule[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [generating, setGenerating] = useState(false);
+  const [activeTab, setActiveTab] = useState<"satellites" | "passes">(
+    "satellites"
+  );
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        setError(null);
-        const [satData, passData] = await Promise.all([
-          fetchSatellites(),
-          fetchPassSchedules(),
-        ]);
-        setSatellites(satData);
-        setPasses(passData);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load data");
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, []);
+  // Use the data context instead of local state
+  const {
+    satellites,
+    passSchedules,
+    loading,
+    error,
+    isStale,
+    refreshSatellites,
+    refreshPassSchedules,
+    getTimeSinceLastUpdate,
+  } = useDataContext();
 
-  const handleRefresh = async () => {
+  const handleGeneratePasses = useCallback(async () => {
     try {
-      setRefreshing(true);
+      await generatePassSchedules();
+      alert("Pass generation started successfully!");
+      // Mark pass schedules as stale so they refresh automatically
+      await refreshPassSchedules();
+    } catch (err) {
+      alert("Failed to generate passes. Please try again.");
+      console.error(err);
+    }
+  }, [refreshPassSchedules]);
+
+  const handleRefreshTLEs = useCallback(async () => {
+    try {
       await refreshTle();
-      const [satData, passData] = await Promise.all([
-        fetchSatellites(),
-        fetchPassSchedules(),
-      ]);
-      setSatellites(satData);
-      setPasses(passData);
+      alert("TLE refresh started successfully!");
+      // Mark satellites as stale so they refresh automatically
+      await refreshSatellites();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Refresh failed");
-    } finally {
-      setRefreshing(false);
+      alert("Failed to refresh TLEs. Please try again.");
+      console.error(err);
     }
-  };
+  }, [refreshSatellites]);
 
-  const handleGeneratePasses = async () => {
+  // Manual refresh handlers for each tab
+  const handleRefreshSatellites = useCallback(async () => {
     try {
-      setGenerating(true);
-      await generatePassSchedules("sample", 7);
-      const passData = await fetchPassSchedules();
-      setPasses(passData);
+      await refreshSatellites();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to generate pass schedules"
-      );
-    } finally {
-      setGenerating(false);
+      console.error("Failed to refresh satellites:", err);
     }
-  };
+  }, [refreshSatellites]);
+
+  const handleRefreshPassSchedules = useCallback(async () => {
+    try {
+      await refreshPassSchedules();
+    } catch (err) {
+      console.error("Failed to refresh pass schedules:", err);
+    }
+  }, [refreshPassSchedules]);
+
+  // Memoize satellite items to prevent unnecessary recalculations
+  const satelliteItems = useMemo(
+    () =>
+      satellites.map((sat) => ({
+        id: sat.norad_id,
+        content: <SatelliteCard satellite={sat} />,
+      })),
+    [satellites]
+  );
+
+  // Memoize pass schedule items to prevent unnecessary recalculations
+  const passScheduleItems = useMemo(
+    () =>
+      passSchedules.map((schedule, idx) => ({
+        id: `${schedule.satellite_norad_id}-${idx}`,
+        content: <PassScheduleCard schedule={schedule} />,
+      })),
+    [passSchedules]
+  );
+
+  // Create sticky header content for satellites
+  const satelliteStickyHeader = useMemo(
+    () => (
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-slate-600">
+            {satellites.length} satellites
+          </span>
+          {isStale.satellites && (
+            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+              Stale
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-500">
+            Updated {getTimeSinceLastUpdate("satellites")}
+          </span>
+          <button
+            onClick={handleRefreshSatellites}
+            disabled={loading.satellites}
+            className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {loading.satellites ? (
+              <>
+                <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-1" />
+                Refreshing
+              </>
+            ) : (
+              "Refresh"
+            )}
+          </button>
+        </div>
+      </div>
+    ),
+    [
+      satellites.length,
+      isStale.satellites,
+      loading.satellites,
+      getTimeSinceLastUpdate,
+      handleRefreshSatellites,
+    ]
+  );
+
+  // Create sticky header content for pass schedules
+  const passSchedulesStickyHeader = useMemo(
+    () => (
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-slate-600">
+            {passSchedules.length} pass schedules
+          </span>
+          {isStale.passSchedules && (
+            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+              Stale
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-500">
+            Updated {getTimeSinceLastUpdate("passSchedules")}
+          </span>
+          <button
+            onClick={handleRefreshPassSchedules}
+            disabled={loading.passSchedules}
+            className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {loading.passSchedules ? (
+              <>
+                <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-1" />
+                Refreshing
+              </>
+            ) : (
+              "Refresh"
+            )}
+          </button>
+        </div>
+      </div>
+    ),
+    [
+      passSchedules.length,
+      isStale.passSchedules,
+      loading.passSchedules,
+      getTimeSinceLastUpdate,
+      handleRefreshPassSchedules,
+    ]
+  );
 
   return (
-    <Layout>
-      <div className="flex justify-end gap-2">
-        <button
-          onClick={handleGeneratePasses}
-          disabled={generating}
-          className="px-3 py-2 bg-blue-600 text-slate-50 rounded-lg border border-slate-300 font-semibold hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 hover:shadow-md hover:-translate-y-0.5"
-        >
-          {generating ? "Generating…" : "Generate Passes"}
-        </button>
-        <button
-          onClick={handleRefresh}
-          disabled={refreshing}
-          className="px-3 py-2 bg-slate-900 text-slate-50 rounded-lg border border-slate-300 font-semibold hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 hover:shadow-md hover:-translate-y-0.5"
-        >
-          {refreshing ? "Refreshing…" : "Refresh TLEs"}
-        </button>
-      </div>
+    <div className="min-h-screen bg-linear-to-br from-slate-50 to-slate-100">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <Header
+          onGeneratePasses={handleGeneratePasses}
+          onRefreshTLEs={handleRefreshTLEs}
+        />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card title={`Satellites (${satellites.length})`}>
-          <SatelliteList
-            satellites={satellites}
-            loading={loading}
-            error={error}
-          />
-        </Card>
+        <TabNavigation
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          satelliteCount={satellites.length}
+          passScheduleCount={passSchedules.length}
+          satellitesLoading={loading.satellites}
+          passesLoading={loading.passSchedules}
+        />
 
-        <Card title="Pass Schedules">
-          <PassScheduleTable data={passes} loading={loading} error={error} />
-        </Card>
+        <main>
+          {activeTab === "satellites" ? (
+            <Card
+              title="Satellites"
+              subtitle={`Total: ${satellites.length} satellites`}
+              stickyHeader={true}
+            >
+              <TwoColumnGrid
+                items={satelliteItems}
+                loading={loading.satellites}
+                error={error.satellites}
+                emptyMessage="No satellites found."
+                stickyHeader={satelliteStickyHeader}
+                maxHeight="max-h-[600px]"
+              />
+            </Card>
+          ) : (
+            <Card
+              title="Pass Schedules"
+              subtitle={`Total: ${passSchedules.length} schedules`}
+              stickyHeader={true}
+            >
+              <TwoColumnGrid
+                items={passScheduleItems}
+                loading={loading.passSchedules}
+                error={error.passSchedules}
+                emptyMessage="No pass schedules found."
+                stickyHeader={passSchedulesStickyHeader}
+                maxHeight="max-h-[600px]"
+              />
+            </Card>
+          )}
+        </main>
       </div>
-    </Layout>
+    </div>
   );
 };
 
